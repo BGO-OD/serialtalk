@@ -21,8 +21,9 @@ void usage(char *const argv[]) {
 					"\t\tavailable: 0, 50, 75, 110, 134, 150, 200, 300, 600,\n"
 					"\t\t1200, 1800, 2400, 4800, 9600, 19200, 38400, 57600,\n"
 					"\t\t115200, 230400\n");
-	fprintf(stderr,"\t-t number\tset poll timeout in milliseconds\n,"
+	fprintf(stderr,"\t-t number\tset poll timeout in milliseconds\n"
 					"\t\t0 means no loop, negative is for ever\n");
+	fprintf(stderr,"\t-B number\tset number of bits, must be 5,6,7, or 8\n");
 	fprintf(stderr,"\t-s\tshow state after timeout, needs timeout value!\n");
 	fprintf(stderr,"\t-v\tbe verbose, show parameters\n");
 	fprintf(stderr,"\t-d\tclear DTR line\n");
@@ -31,6 +32,10 @@ void usage(char *const argv[]) {
 	fprintf(stderr,"\t-R\tset   RTS line\n");
 	fprintf(stderr,"\t-c\tclear CTS line\n");
 	fprintf(stderr,"\t-C\tset   CTS line\n");
+	fprintf(stderr,"\t-p\tenable odd parity\n");
+	fprintf(stderr,"\t-P\tenable even parity\n");
+
+
 
 	fprintf(stderr,"\t-h\tthis help\n");
 	exit(EXIT_FAILURE);
@@ -71,11 +76,20 @@ int main(int argc, char *const argv[]) {
 	int timeout=-1;
 	int setlines=0;
 	int clearlines=0;
-	while ((opt=getopt(argc,argv,"b:o:t:svdDrRcCh")) != -1) {
+	int bits=CS8;
+	int parity=0;
+	while ((opt=getopt(argc,argv,"b:o:t:B:svdDrRcCpPh")) != -1) {
 		switch (opt) {
 		case 'b': baudin=strtol(optarg,NULL,10); break;
 		case 'o': baudout=strtol(optarg,NULL,10); break;
 		case 't': timeout=strtol(optarg,NULL,10); break;
+		case 'B': switch (optarg[0]) {
+			case '5': bits=CS5; break;
+			case '6': bits=CS6; break;
+			case '7': bits=CS7; break;
+			case '8': bits=CS8; break;
+			default: usage(argv);
+			} break;
 		case 'v': verbose=1; break;
 		case 's': showstate=1; break;
 		case 'd': clearlines |= TIOCM_DTR; break;
@@ -84,6 +98,8 @@ int main(int argc, char *const argv[]) {
 		case 'R': setlines   |= TIOCM_RTS; break;
 		case 'c': clearlines |= TIOCM_CTS; break;
 		case 'C': setlines   |= TIOCM_CTS; break;
+		case 'p': parity = 1; break;
+		case 'P': parity = 2; break;
 		case 'h':
 		default: usage(argv);
 		}
@@ -111,17 +127,27 @@ int main(int argc, char *const argv[]) {
 		fprintf(stderr,"\toutput baudrate\t%d\n",baudout);
 		fprintf(stderr,"\twill set "); printstate(setlines);
 		fprintf(stderr,"\twill clear "); printstate(clearlines);
+		fprintf(stderr,"\t%d bits\n",(bits==CS8) ? 8 : ((bits==CS7) ? 7 : ((bits==CS6) ? 6 : ((bits==CS5) ? 5 : (-1)))));
+		fprintf(stderr,"\t%s parity\n",parity ? ((parity==1)?"odd":"even") : "no"); 
 	}
 	
 
 
-	fd_attr.c_iflag = IGNBRK | IGNPAR;
+	fd_attr.c_iflag = IGNBRK;
+	if (parity==0) {
+		fd_attr.c_iflag |= IGNPAR;
+	}
 	fd_attr.c_iflag &= ~(INLCR | IGNCR | ICRNL);
 	fd_attr.c_oflag = 0;
-	fd_attr.c_cflag = CS8	/* eight bits per character */
+	fd_attr.c_cflag = bits	/* number of bits per character */
 		| CREAD		/* enable receiver */
-		| CLOCAL	/* ignore modem control lines */
-		| PARENB;	/* parity even */
+		| CLOCAL;	/* ignore modem control lines */
+	if (parity) {
+		fd_attr.c_cflag |= PARENB;
+	}
+	if (parity==1) {
+		fd_attr.c_cflag |= PARODD;
+	}
 	fd_attr.c_lflag = 0;
 	speed_t baud;
 	switch (baudout) {
@@ -186,7 +212,7 @@ int main(int argc, char *const argv[]) {
 	
 	struct pollfd pollfds[2];
 	pollfds[0].fd = fd;
-	pollfds[0].events = POLLIN;
+	pollfds[0].events = POLLIN | POLLERR;
 	pollfds[1].fd = 0;
 	pollfds[1].events = POLLIN;
 
@@ -204,6 +230,12 @@ int main(int argc, char *const argv[]) {
 									timeout);
 		if (result==0 && showstate) {
 			getstate(fd);
+		}
+		if (pollfds[0].revents & POLLERR) { /* some problem occurred */
+			struct timeval now;
+			gettimeofday(&now,NULL);
+			fprintf(stderr,"Error: %d.%06d\n",
+					(int)(now.tv_sec), (int)(now.tv_usec));
 		}
 		if (pollfds[0].revents & POLLIN) { /* data from tty to stdout */
 			char c;
