@@ -34,8 +34,8 @@ void usage(char *const argv[]) {
 	fprintf(stderr,"\t-C\tset   CTS line\n");
 	fprintf(stderr,"\t-p\tenable odd parity\n");
 	fprintf(stderr,"\t-P\tenable even parity\n");
-
-
+	fprintf(stderr,"\t-n\tnon-canonical stdin, read immediately (not at newline)\n");
+	fprintf(stderr,"\t-T\tprint time stamps\n");
 
 	fprintf(stderr,"\t-h\tthis help\n");
 	exit(EXIT_FAILURE);
@@ -76,9 +76,11 @@ int main(int argc, char *const argv[]) {
 	int timeout=-1;
 	int setlines=0;
 	int clearlines=0;
+	int canonical=1;
 	int bits=CS8;
 	int parity=0;
-	while ((opt=getopt(argc,argv,"b:o:t:B:svdDrRcCpPh")) != -1) {
+	int timing=0;
+	while ((opt=getopt(argc,argv,"b:o:t:B:svdDrRcCpPnTh")) != -1) {
 		switch (opt) {
 		case 'b': baudin=strtol(optarg,NULL,10); break;
 		case 'o': baudout=strtol(optarg,NULL,10); break;
@@ -100,6 +102,8 @@ int main(int argc, char *const argv[]) {
 		case 'C': setlines   |= TIOCM_CTS; break;
 		case 'p': parity = 1; break;
 		case 'P': parity = 2; break;
+		case 'n': canonical=0; break;
+		case 'T': timing=1; break;
 		case 'h':
 		default: usage(argv);
 		}
@@ -132,6 +136,12 @@ int main(int argc, char *const argv[]) {
 	}
 	
 
+	if (!canonical) {
+		struct termios attr;
+		tcgetattr(0,&attr);
+		attr.c_lflag &= ~ICANON;
+		tcsetattr(0,TCSANOW,&attr);
+	}
 
 	fd_attr.c_iflag = IGNBRK;
 	if (parity==0) {
@@ -215,7 +225,7 @@ int main(int argc, char *const argv[]) {
 	pollfds[0].events = POLLIN | POLLERR;
 	pollfds[1].fd = 0;
 	pollfds[1].events = POLLIN;
-
+	int nfds=2;
 
 	if (showstate) getstate(fd);
 	ioctl(fd,TIOCMBIC,&clearlines);
@@ -223,17 +233,21 @@ int main(int argc, char *const argv[]) {
 	if ((clearlines || setlines) && showstate) {
 		getstate(fd);
 	}
+	
 	for (;timeout;) {
 		int result;
+		struct timeval now;
 		result=poll(pollfds,
-									sizeof(pollfds)/sizeof(pollfds[0]),
+									nfds,
 									timeout);
+		gettimeofday(&now,NULL);
+		if (nfds==1 && result==0 && timeout>0) {
+			break;
+		}
 		if (result==0 && showstate) {
 			getstate(fd);
 		}
 		if (pollfds[0].revents & POLLERR) { /* some problem occurred */
-			struct timeval now;
-			gettimeofday(&now,NULL);
 			fprintf(stderr,"Error: %d.%06d\n",
 					(int)(now.tv_sec), (int)(now.tv_usec));
 		}
@@ -241,11 +255,27 @@ int main(int argc, char *const argv[]) {
 			char c;
 			read(fd,&c,1);
 			write(1,&c,1);
+			if (timing) {
+				fprintf(stderr,"Received %d.%06d '%c' (0x%02x)\n",
+								(int)(now.tv_sec), (int)(now.tv_usec),c<' '?' ':c,c);
+			}
 		}
 		if (pollfds[1].revents & POLLIN) { /* data from stdin to tty */
 			char c;
-			read(1,&c,1);
+			read(0,&c,1);
+			gettimeofday(&now,NULL);
 			write(fd,&c,1);
+			if (timing) {
+				fprintf(stderr,"Sent %d.%06d '%c' (0x%02x)\n",
+								(int)(now.tv_sec), (int)(now.tv_usec),c<' '?' ':c,c);
+			}
+		}
+		if ((pollfds[1].revents & POLLHUP) && !(pollfds[1].revents & POLLIN)) { 
+			if (timeout > 0) {
+				nfds=1;
+			} else {
+				break;
+			}
 		}
 	}
 	close(fd);
