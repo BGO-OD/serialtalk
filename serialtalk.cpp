@@ -35,6 +35,7 @@ void usage(char *const argv[]) {
 	fprintf(stderr,"\t-p\tenable odd parity\n");
 	fprintf(stderr,"\t-P\tenable even parity\n");
 	fprintf(stderr,"\t-n\tnon-canonical stdin, read immediately (not at newline)\n");
+	fprintf(stderr,"\t-N\tno local echo for typed characters\n");
 	fprintf(stderr,"\t-T\tprint time stamps\n");
 
 	fprintf(stderr,"\t-h\tthis help\n");
@@ -80,7 +81,8 @@ int main(int argc, char *const argv[]) {
 	int bits=CS8;
 	int parity=0;
 	int timing=0;
-	while ((opt=getopt(argc,argv,"b:o:t:B:svdDrRcCpPnTh")) != -1) {
+	int noecho=0;
+	while ((opt=getopt(argc,argv,"b:o:t:B:svdDrRcCpPnNTh")) != -1) {
 		switch (opt) {
 		case 'b': baudin=strtol(optarg,NULL,10); break;
 		case 'o': baudout=strtol(optarg,NULL,10); break;
@@ -103,6 +105,7 @@ int main(int argc, char *const argv[]) {
 		case 'p': parity = 1; break;
 		case 'P': parity = 2; break;
 		case 'n': canonical=0; break;
+		case 'N': noecho=1; break;
 		case 'T': timing=1; break;
 		case 'h':
 		default: usage(argv);
@@ -140,6 +143,12 @@ int main(int argc, char *const argv[]) {
 		struct termios attr;
 		tcgetattr(0,&attr);
 		attr.c_lflag &= ~ICANON;
+		tcsetattr(0,TCSANOW,&attr);
+	}
+	if (noecho) {
+		struct termios attr;
+		tcgetattr(0,&attr);
+		attr.c_lflag &= ~ECHO;
 		tcsetattr(0,TCSANOW,&attr);
 	}
 
