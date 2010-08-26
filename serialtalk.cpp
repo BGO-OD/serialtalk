@@ -19,8 +19,8 @@ void usage(char *const argv[]) {
 	fprintf(stderr,"\t-b number\tset baudrate\n");
 	fprintf(stderr,"\t-o number\tset output baudrate\n"
 					"\t\tavailable: 0, 50, 75, 110, 134, 150, 200, 300, 600,\n"
-					"\t\t1200, 1800, 2400, 4800, 9600, 19200, 38400, 57600,\n"
-					"\t\t115200, 230400\n");
+					"\t\t1200, 1800, 2400, 4800, 9600 (default), 19200, 38400,\n"
+					"\t\t57600, 115200, 230400, 500000\n");
 	fprintf(stderr,"\t-t number\tset poll timeout in milliseconds\n"
 					"\t\t0 means no loop, negative is for ever\n");
 	fprintf(stderr,"\t-B number\tset number of bits, must be 5,6,7, or 8\n");
@@ -189,6 +189,7 @@ int main(int argc, char *const argv[]) {
 	case 57600: baud=B57600;break;
 	case 115200: baud=B115200;break;
 	case 230400: baud=B230400;break;
+	case 500000: baud=B500000;break;
 	default: fprintf(stderr,"illegal baud rate %d",baudout);
 		exit(EXIT_FAILURE);
 	}
@@ -213,6 +214,7 @@ int main(int argc, char *const argv[]) {
 	case 57600: baud=B57600;break;
 	case 115200: baud=B115200;break;
 	case 230400: baud=B230400;break;
+	case 500000: baud=B500000;break;
 	default: fprintf(stderr,"illegal baud rate %d",baudin);
 		exit(EXIT_FAILURE);
 	}
