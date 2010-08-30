@@ -20,7 +20,8 @@ void usage(char *const argv[]) {
 	fprintf(stderr,"\t-o number\tset output baudrate\n"
 					"\t\tavailable: 0, 50, 75, 110, 134, 150, 200, 300, 600,\n"
 					"\t\t1200, 1800, 2400, 4800, 9600 (default), 19200, 38400,\n"
-					"\t\t57600, 115200, 230400, 500000\n");
+					"\t\t57600, 115200, 230400, 500000, 576000, 921600, 1000000,\n" 
+					"\t\t1152000, 1500000, 2000000, 2500000, 3000000, 3500000, 4000000\n");
 	fprintf(stderr,"\t-t number\tset poll timeout in milliseconds\n"
 					"\t\t0 means no loop, negative is for ever\n");
 	fprintf(stderr,"\t-B number\tset number of bits, must be 5,6,7, or 8\n");
@@ -37,6 +38,8 @@ void usage(char *const argv[]) {
 	fprintf(stderr,"\t-n\tnon-canonical stdin, read immediately (not at newline)\n");
 	fprintf(stderr,"\t-N\tno local echo for typed characters\n");
 	fprintf(stderr,"\t-T\tprint time stamps\n");
+	fprintf(stderr,"\t-H\tdo HUPCL (lower control lines after close)\n");
+	fprintf(stderr,"\t-w number\twait number miliseconds after end of stdin before close\n");
 
 	fprintf(stderr,"\t-h\tthis help\n");
 	exit(EXIT_FAILURE);
@@ -82,7 +85,9 @@ int main(int argc, char *const argv[]) {
 	int parity=0;
 	int timing=0;
 	int noecho=0;
-	while ((opt=getopt(argc,argv,"b:o:t:B:svdDrRcCpPnNTh")) != -1) {
+	int do_hupcl=0;
+	int wait=0;
+	while ((opt=getopt(argc,argv,"b:o:t:B:svdDrRcCpPnNTHw:h")) != -1) {
 		switch (opt) {
 		case 'b': baudin=strtol(optarg,NULL,10); break;
 		case 'o': baudout=strtol(optarg,NULL,10); break;
@@ -107,12 +112,18 @@ int main(int argc, char *const argv[]) {
 		case 'n': canonical=0; break;
 		case 'N': noecho=1; break;
 		case 'T': timing=1; break;
+		case 'H': do_hupcl=1; break;
+		case 'w': wait=strtol(optarg,NULL,10); break;
 		case 'h':
 		default: usage(argv);
 		}
 	}
 	if (optind>=argc) {
 		usage(argv);
+	}
+
+	if (wait && timeout==-1) {
+		timeout = wait;
 	}
 
 	if (baudout==0) {
@@ -167,6 +178,9 @@ int main(int argc, char *const argv[]) {
 	if (parity==1) {
 		fd_attr.c_cflag |= PARODD;
 	}
+	if (do_hupcl) {
+		fd_attr.c_cflag |= HUPCL;
+	}
 	fd_attr.c_lflag = 0;
 	speed_t baud;
 	switch (baudout) {
@@ -190,6 +204,16 @@ int main(int argc, char *const argv[]) {
 	case 115200: baud=B115200;break;
 	case 230400: baud=B230400;break;
 	case 500000: baud=B500000;break;
+	case 576000: baud=B576000;break;  
+	case 921600: baud=B921600;break;  
+	case 1000000: baud=B1000000;break; 
+	case 1152000: baud=B1152000;break; 
+	case 1500000: baud=B1500000;break; 
+	case 2000000: baud=B2000000;break; 
+	case 2500000: baud=B2500000;break; 
+	case 3000000: baud=B3000000;break; 
+	case 3500000: baud=B3500000;break; 
+	case 4000000: baud=B4000000;break; 
 	default: fprintf(stderr,"illegal baud rate %d",baudout);
 		exit(EXIT_FAILURE);
 	}
@@ -215,6 +239,17 @@ int main(int argc, char *const argv[]) {
 	case 115200: baud=B115200;break;
 	case 230400: baud=B230400;break;
 	case 500000: baud=B500000;break;
+	case 576000: baud=B576000;break;  
+	case 921600: baud=B921600;break;  
+	case 1000000: baud=B1000000;break; 
+	case 1152000: baud=B1152000;break; 
+	case 1500000: baud=B1500000;break; 
+	case 2000000: baud=B2000000;break; 
+	case 2500000: baud=B2500000;break; 
+	case 3000000: baud=B3000000;break; 
+	case 3500000: baud=B3500000;break; 
+	case 4000000: baud=B4000000;break; 
+
 	default: fprintf(stderr,"illegal baud rate %d",baudin);
 		exit(EXIT_FAILURE);
 	}
@@ -252,15 +287,18 @@ int main(int argc, char *const argv[]) {
 									nfds,
 									timeout);
 		gettimeofday(&now,NULL);
-		if (nfds==1 && result==0 && timeout>0) {
+		if (nfds==1 && result==0) {
+			wait -= timeout;
+		}
+		if (nfds==1 && result==0 && timeout>0 && wait<=0) {
 			break;
 		}
 		if (result==0 && showstate) {
 			getstate(fd);
 		}
 		if (pollfds[0].revents & POLLERR) { /* some problem occurred */
-			fprintf(stderr,"Error: %d.%06d\n",
-					(int)(now.tv_sec), (int)(now.tv_usec));
+			fprintf(stderr,"Error: %d.%06d %s\n",
+							(int)(now.tv_sec), (int)(now.tv_usec),strerror(errno));
 		}
 		if (pollfds[0].revents & POLLIN) { /* data from tty to stdout */
 			char c;
