@@ -38,6 +38,8 @@ void usage(char *const argv[]) {
 	fprintf(stderr,"\t-n\tnon-canonical stdin, read immediately (not at newline)\n");
 	fprintf(stderr,"\t-N\tno local echo for typed characters\n");
 	fprintf(stderr,"\t-T\tprint time stamps\n");
+	fprintf(stderr,"\t-x\ttranslate nl to cr nl\n");
+	fprintf(stderr,"\t-X\ttranslate nl to cr\n");
 	fprintf(stderr,"\t-H\tdo HUPCL (lower control lines after close)\n");
 	fprintf(stderr,"\t-w number\twait number miliseconds after end of stdin before close\n");
 
@@ -87,7 +89,9 @@ int main(int argc, char *const argv[]) {
 	int noecho=0;
 	int do_hupcl=0;
 	int wait=0;
-	while ((opt=getopt(argc,argv,"b:o:t:B:svdDrRcCpPnNTHw:h")) != -1) {
+	int translate_to_crnl=0;
+
+	while ((opt=getopt(argc,argv,"b:o:t:B:svdDrRcCpPnNxXTHw:h")) != -1) {
 		switch (opt) {
 		case 'b': baudin=strtol(optarg,NULL,10); break;
 		case 'o': baudout=strtol(optarg,NULL,10); break;
@@ -111,6 +115,8 @@ int main(int argc, char *const argv[]) {
 		case 'P': parity = 2; break;
 		case 'n': canonical=0; break;
 		case 'N': noecho=1; break;
+		case 'x': translate_to_crnl=1; break;
+		case 'X': translate_to_crnl=2; break;
 		case 'T': timing=1; break;
 		case 'H': do_hupcl=1; break;
 		case 'w': wait=strtol(optarg,NULL,10); break;
@@ -312,11 +318,22 @@ int main(int argc, char *const argv[]) {
 		if (pollfds[1].revents & POLLIN) { /* data from stdin to tty */
 			char c;
 			read(0,&c,1);
-			gettimeofday(&now,NULL);
-			write(fd,&c,1);
-			if (timing) {
-				fprintf(stderr,"Sent %d.%06d '%c' (0x%02x)\n",
-								(int)(now.tv_sec), (int)(now.tv_usec),c<' '?' ':c,c);
+			if (translate_to_crnl && (c=='\n')) {
+				char cr='\r';
+				gettimeofday(&now,NULL);
+				write(fd,&cr,1);
+				if (timing) {
+					fprintf(stderr,"Sent %d.%06d <cr> (0x%02x)\n",
+									(int)(now.tv_sec), (int)(now.tv_usec),cr);
+				}
+			} 
+			if (translate_to_crnl < 2 || (c!='\n')) {
+				gettimeofday(&now,NULL);
+				write(fd,&c,1);
+				if (timing) {
+					fprintf(stderr,"Sent %d.%06d '%c' (0x%02x)\n",
+									(int)(now.tv_sec), (int)(now.tv_usec),c<' '?' ':c,c);
+				}
 			}
 		}
 		if ((pollfds[1].revents & POLLHUP) && !(pollfds[1].revents & POLLIN)) { 
