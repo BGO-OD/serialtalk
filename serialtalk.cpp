@@ -37,10 +37,12 @@ void usage(char *const argv[]) {
 	fprintf(stderr,"\t-P\tenable even parity\n");
 	fprintf(stderr,"\t-n\tnon-canonical stdin, read immediately (not at newline)\n");
 	fprintf(stderr,"\t-N\tno local echo for typed characters\n");
-	fprintf(stderr,"\t-y\tsend ctrl-c\n");
+	fprintf(stderr,"\t-k\tsend ctrl-c and exit\n");
 	fprintf(stderr,"\t-T\tprint time stamps\n");
-	fprintf(stderr,"\t-x\ttranslate nl to cr nl\n");
-	fprintf(stderr,"\t-X\ttranslate nl to cr\n");
+	fprintf(stderr,"\t-x\ttranslate nl to cr nl (from terminal to device)\n");
+	fprintf(stderr,"\t-X\ttranslate nl to cr (from terminal to device)\n");
+	fprintf(stderr,"\t-y\ttranslate cr to cr nl (from device to terminal)\n");
+	fprintf(stderr,"\t-Y\ttranslate cr to nl (from device to terminal)\n");
 	fprintf(stderr,"\t-H\tdo HUPCL (lower control lines after close)\n");
 	fprintf(stderr,"\t-w number\twait number miliseconds after end of stdin before close\n");
 
@@ -91,9 +93,10 @@ int main(int argc, char *const argv[]) {
 	int do_hupcl=0;
 	int wait=0;
 	int translate_to_crnl=0;
+	int translate_from_crnl=0;
 	int send_ctrl_c=0;
 
-	while ((opt=getopt(argc,argv,"b:o:t:B:svdDrRcCpPnNxXyTHw:h")) != -1) {
+	while ((opt=getopt(argc,argv,"b:o:t:B:svdDrRcCpPnNkxXyYTHw:h")) != -1) {
 		switch (opt) {
 		case 'b': baudin=strtol(optarg,NULL,10); break;
 		case 'o': baudout=strtol(optarg,NULL,10); break;
@@ -119,9 +122,11 @@ int main(int argc, char *const argv[]) {
 		case 'N': noecho=1; break;
 		case 'x': translate_to_crnl=1; break;
 		case 'X': translate_to_crnl=2; break;
+		case 'y': translate_from_crnl=1; break;
+		case 'Y': translate_from_crnl=2; break;
 		case 'T': timing=1; break;
 		case 'H': do_hupcl=1; break;
-		case 'y': send_ctrl_c=1; break;
+		case 'k': send_ctrl_c=1; break;
 		case 'w': wait=strtol(optarg,NULL,10); break;
 		case 'h':
 		default: usage(argv);
@@ -319,11 +324,17 @@ int main(int argc, char *const argv[]) {
 		if (pollfds[0].revents & POLLIN) { /* data from tty to stdout */
 			char c;
 			read(fd,&c,1);
-			write(1,&c,1);
 			if (timing) {
 				fprintf(stderr,"Received %d.%06d '%c' (0x%02x)\n",
 								(int)(now.tv_sec), (int)(now.tv_usec),c<' '?' ':c,c);
 			}
+			if (translate_from_crnl && (c=='\r')) {
+				if (translate_from_crnl==1) {
+					write(1,&c,1);
+				}
+				c='\n';
+			}
+			write(1,&c,1);
 		}
 		if (pollfds[1].revents & POLLIN) { /* data from stdin to tty */
 			char c;
