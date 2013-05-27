@@ -13,6 +13,7 @@
 #include <sys/ioctl.h>
 #include <sys/time.h>
 
+void usage(char *const argv[]) __attribute__ ((noreturn));
 void usage(char *const argv[]) {
 	fprintf(stderr,"usage: %s <options> device\n",argv[0]);
 	fprintf(stderr,"\tExit by ctrl-c (kill)!\n");
