@@ -15,41 +15,66 @@
 #include <sys/socket.h>
 #include <netdb.h>
 
+
+static int timeout=-1;
+static int fd;
+static bool timing=false;
+static int translate_to_crnl=0;
+static int translate_from_crnl=0;
+static int wait=0;
+static bool showstate=false;
+static int verbose=0;
+static int baudin=9600;
+static int baudout=0;
+static int setlines=0;
+static int clearlines=0;
+static bool canonical=true;
+static int bits=CS8;
+static int parity=0;
+static bool noecho=false;
+static bool do_hupcl=false;
+static bool send_ctrl_c=false;
+static int listenPort=0;
+static bool doFork=false;
+
+
 static void usage(char *const argv[]) __attribute__ ((noreturn));
 static void usage(char *const argv[]) {
 	fprintf(stderr,"usage: %s <options> device\n",argv[0]);
 	fprintf(stderr,"\tExit by ctrl-c (kill)!\n");
-	fprintf(stderr,"\t-b number\tset baudrate\n");
-	fprintf(stderr,"\t-o number\tset output baudrate\n"
+	fprintf(stderr,"\t-b number\tset baudrate (%d)\n",baudin);
+	fprintf(stderr,"\t-o number\tset output baudrate (%d) 0: the same as input\n"
 					"\t\tavailable: 0, 50, 75, 110, 134, 150, 200, 300, 600,\n"
 					"\t\t1200, 1800, 2400, 4800, 9600 (default), 19200, 38400,\n"
 					"\t\t57600, 115200, 230400, 500000, 576000, 921600, 1000000,\n" 
-					"\t\t1152000, 1500000, 2000000, 2500000, 3000000, 3500000, 4000000\n");
-	fprintf(stderr,"\t-t number\tset poll timeout in milliseconds\n"
-					"\t\t0 means no loop, negative is for ever\n");
-	fprintf(stderr,"\t-B number\tset number of bits, must be 5,6,7, or 8\n");
-	fprintf(stderr,"\t-s\tshow state after timeout, needs timeout value!\n");
-	fprintf(stderr,"\t-v\tbe verbose, show parameters\n");
-	fprintf(stderr,"\t-d\tclear DTR line\n");
-	fprintf(stderr,"\t-D\tset   DTR line\n");
-	fprintf(stderr,"\t-r\tclear RTS line\n");
-	fprintf(stderr,"\t-R\tset   RTS line\n");
-	fprintf(stderr,"\t-c\tclear CTS line\n");
-	fprintf(stderr,"\t-C\tset   CTS line\n");
-	fprintf(stderr,"\t-p\tenable odd parity\n");
+	        "\t\t1152000, 1500000, 2000000, 2500000, 3000000, 3500000, 4000000\n",baudout);
+	fprintf(stderr,"\t-t number\tset poll timeout in milliseconds (%d)\n"
+	        "\t\t0 means no loop, negative is for ever\n",timeout);
+	fprintf(stderr,"\t-B number\tset number of bits, must be 5,6,7, or 8   (%d)\n",
+	        bits==CS5?5:(bits==CS6?6:(bits==CS7?7:8)));
+	fprintf(stderr,"\t-s\tshow state after timeout, needs timeout value! (%s)\n",showstate?"yes":"no");
+	fprintf(stderr,"\t-v\tbe verbose, show parameters (%d)\n",verbose);
+	fprintf(stderr,"\t-d\tclear DTR line (%s)\n", clearlines & TIOCM_DTR ? "yes":"no");
+	fprintf(stderr,"\t-D\tset   DTR line (%s)\n", setlines & TIOCM_DTR ? "yes":"no");
+	fprintf(stderr,"\t-r\tclear RTS line (%s)\n", clearlines & TIOCM_RTS ? "yes":"no");
+	fprintf(stderr,"\t-R\tset   RTS line (%s)\n", setlines & TIOCM_RTS ? "yes":"no");
+	fprintf(stderr,"\t-c\tclear CTS line (%s)\n", clearlines & TIOCM_CTS ? "yes":"no");
+	fprintf(stderr,"\t-C\tset   CTS line (%s)\n", setlines & TIOCM_CTS ? "yes":"no");
+	fprintf(stderr,"\t-p\tenable odd parity (default: %s)\n",parity==0?"none":(parity==1?"odd":"even"));
 	fprintf(stderr,"\t-P\tenable even parity\n");
-	fprintf(stderr,"\t-n\tnon-canonical stdin, read immediately (not at newline)\n");
-	fprintf(stderr,"\t-N\tno local echo for typed characters\n");
-	fprintf(stderr,"\t-k\tsend ctrl-c and exit\n");
-	fprintf(stderr,"\t-T\tprint time stamps\n");
-	fprintf(stderr,"\t-x\ttranslate nl to cr nl (from terminal to device)\n");
-	fprintf(stderr,"\t-X\ttranslate nl to cr (from terminal to device)\n");
-	fprintf(stderr,"\t-y\ttranslate cr to cr nl (from device to terminal)\n");
-	fprintf(stderr,"\t-Y\ttranslate cr to nl (from device to terminal)\n");
-	fprintf(stderr,"\t-H\tdo HUPCL (lower control lines after close)\n");
-	fprintf(stderr,"\t-w number\twait number miliseconds after end of stdin before close\n");
-	fprintf(stderr,"\t-l port\tlisten on port port for tcp connections and use them instead of stdin/stdout\n");
-	fprintf(stderr,"\t-f\tfork into a daemonic life\n");
+	fprintf(stderr,"\t-n\tnon-canonical stdin, read immediately (not at newline) (%scanonical)\n",
+	        (!canonical)?"yes, non-":"no, ");
+	fprintf(stderr,"\t-N\tno local echo for typed characters (%s)\n",noecho?"yes, no echo":"no, do echo");
+	fprintf(stderr,"\t-k\tsend ctrl-c and exit (%s)\n",send_ctrl_c?"yes":"no");
+	fprintf(stderr,"\t-T\tprint time stamps (%s)\n",timing?"yes":"no");
+	fprintf(stderr,"\t-x\ttranslate nl to cr nl (from terminal to device) (%s)\n",translate_to_crnl==1?"yes":"no");
+	fprintf(stderr,"\t-X\ttranslate nl to cr (from terminal to device) (%s)\n",translate_to_crnl==2?"yes":"no");
+	fprintf(stderr,"\t-y\ttranslate cr to cr nl (from device to terminal) (%s)\n",translate_from_crnl==1?"yes":"no");
+	fprintf(stderr,"\t-Y\ttranslate cr to nl (from device to terminal) (%s)\n",translate_from_crnl==2?"yes":"no");
+	fprintf(stderr,"\t-H\tdo HUPCL (lower control lines after close) (%s)\n",do_hupcl?"yes":"no");
+	fprintf(stderr,"\t-w number\twait number miliseconds after end of stdin before close (%d)\n",wait);
+	fprintf(stderr,"\t-l port\tlisten on port port for tcp connections and use them instead of stdin/stdout (%d)\n",listenPort);
+	fprintf(stderr,"\t-f\tfork into a daemonic life (%s)\n",doFork?"yes":"no");
 	
 	fprintf(stderr,"\t-h\tthis help\n");
 	exit(EXIT_FAILURE);
@@ -68,23 +93,16 @@ static void printstate(int state) {
 					(state & TIOCM_DSR) ? "DSR " : "");
 }
 
-static void getstate(int fd) {
+static void getstate(int ffd) {
 	int state;
 	struct timeval now;
-	ioctl(fd,TIOCMGET,&state);
+	ioctl(ffd,TIOCMGET,&state);
 	gettimeofday(&now,NULL);
 	fprintf(stderr,"State: %d.%06d ",
 					(int)(now.tv_sec), (int)(now.tv_usec));
 	printstate(state);
 }
 
-static int timeout=-1;
-static int fd;
-static bool timing=0;
-static int translate_to_crnl=0;
-static int translate_from_crnl=0;
-static int wait=0;
-static bool showstate=0;
 
 
 static void talkLoop(struct pollfd *pollfds, int nfds, int outFd) {
@@ -160,19 +178,6 @@ static void talkLoop(struct pollfd *pollfds, int nfds, int outFd) {
 int main(int argc, char *const argv[]) {
 	struct termios fd_attr;
 	int opt;
-	int verbose=0;
-	int baudin=9600;
-	int baudout=0;
-	int setlines=0;
-	int clearlines=0;
-	bool canonical=1;
-	int bits=CS8;
-	int parity=0;
-	bool noecho=0;
-	bool do_hupcl=0;
-	bool send_ctrl_c=0;
-	int listenPort=0;
-	bool doFork=0;
 
 	while ((opt=getopt(argc,argv,"b:o:t:B:svdDrRcCpPnNkxXyYTHw:hl:f")) != -1) {
 		switch (opt) {
