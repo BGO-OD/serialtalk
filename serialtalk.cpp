@@ -12,9 +12,11 @@
 #include <sys/poll.h>
 #include <sys/ioctl.h>
 #include <sys/time.h>
+#include <sys/socket.h>
+#include <netdb.h>
 
-void usage(char *const argv[]) __attribute__ ((noreturn));
-void usage(char *const argv[]) {
+static void usage(char *const argv[]) __attribute__ ((noreturn));
+static void usage(char *const argv[]) {
 	fprintf(stderr,"usage: %s <options> device\n",argv[0]);
 	fprintf(stderr,"\tExit by ctrl-c (kill)!\n");
 	fprintf(stderr,"\t-b number\tset baudrate\n");
@@ -46,12 +48,14 @@ void usage(char *const argv[]) {
 	fprintf(stderr,"\t-Y\ttranslate cr to nl (from device to terminal)\n");
 	fprintf(stderr,"\t-H\tdo HUPCL (lower control lines after close)\n");
 	fprintf(stderr,"\t-w number\twait number miliseconds after end of stdin before close\n");
-
+	fprintf(stderr,"\t-l port\tlisten on port port for tcp connections and use them instead of stdin/stdout\n");
+	fprintf(stderr,"\t-f\tfork into a daemonic life\n");
+	
 	fprintf(stderr,"\t-h\tthis help\n");
 	exit(EXIT_FAILURE);
 }
 
-void printstate(int state) {
+static void printstate(int state) {
 	fprintf(stderr,"%s%s%s%s%s%s%s%s%s\n",
 					(state & TIOCM_LE) ? "LE " : "",
 					(state & TIOCM_DTR) ? "DTR " : "",
@@ -64,7 +68,7 @@ void printstate(int state) {
 					(state & TIOCM_DSR) ? "DSR " : "");
 }
 
-void getstate(int fd) {
+static void getstate(int fd) {
 	int state;
 	struct timeval now;
 	ioctl(fd,TIOCMGET,&state);
@@ -74,30 +78,103 @@ void getstate(int fd) {
 	printstate(state);
 }
 
+static int timeout=-1;
+static int fd;
+static bool timing=0;
+static int translate_to_crnl=0;
+static int translate_from_crnl=0;
+static int wait=0;
+static bool showstate=0;
+
+
+static void talkLoop(struct pollfd *pollfds, int nfds, int outFd) {
+	for (;timeout;) {
+		int result;
+		struct timeval now;
+		result=poll(pollfds,
+									nfds,
+									timeout);
+		gettimeofday(&now,NULL);
+		if (nfds==1 && result==0) {
+			wait -= timeout;
+		}
+		if (nfds==1 && result==0 && timeout>0 && wait<=0) {
+			break;
+		}
+		if (result==0 && showstate) {
+			getstate(fd);
+		}
+		if (pollfds[0].revents & POLLERR) { /* some problem occurred */
+			fprintf(stderr,"Error: %d.%06d %s\n",
+							(int)(now.tv_sec), (int)(now.tv_usec),strerror(errno));
+		}
+		if (pollfds[0].revents & POLLIN) { /* data from tty to stdout */
+			char c;
+			read(fd,&c,1);
+			if (timing) {
+				fprintf(stderr,"Received %d.%06d '%c' (0x%02x)\n",
+								(int)(now.tv_sec), (int)(now.tv_usec),c<' '?' ':c,c);
+			}
+			if (translate_from_crnl && (c=='\r')) {
+				if (translate_from_crnl==1) {
+					write(outFd,&c,1);
+				}
+				c='\n';
+			}
+			write(outFd,&c,1);
+		}
+		if (pollfds[1].revents & POLLIN) { /* data from stdin to tty */
+			char c;
+			read(pollfds[1].fd,&c,1);
+			if (translate_to_crnl && (c=='\n')) {
+				char cr='\r';
+				gettimeofday(&now,NULL);
+				write(fd,&cr,1);
+				if (timing) {
+					fprintf(stderr,"Sent %d.%06d <cr> (0x%02x)\n",
+									(int)(now.tv_sec), (int)(now.tv_usec),cr);
+				}
+			} 
+			if (translate_to_crnl < 2 || (c!='\n')) {
+				gettimeofday(&now,NULL);
+				write(fd,&c,1);
+				if (timing) {
+					fprintf(stderr,"Sent %d.%06d '%c' (0x%02x)\n",
+									(int)(now.tv_sec), (int)(now.tv_usec),c<' '?' ':c,c);
+				}
+			}
+		}
+		if (((pollfds[1].revents & POLLHUP) && !(pollfds[1].revents & POLLIN))
+		    || (pollfds[1].revents & POLLRDHUP)) { 
+			if (timeout > 0) {
+				nfds=1;
+			} else {
+				break;
+			}
+		}
+	}
+}
+
+
 
 int main(int argc, char *const argv[]) {
 	struct termios fd_attr;
-	int fd;
 	int opt;
 	int verbose=0;
 	int baudin=9600;
 	int baudout=0;
-	int showstate=0;
-	int timeout=-1;
 	int setlines=0;
 	int clearlines=0;
-	int canonical=1;
+	bool canonical=1;
 	int bits=CS8;
 	int parity=0;
-	int timing=0;
-	int noecho=0;
-	int do_hupcl=0;
-	int wait=0;
-	int translate_to_crnl=0;
-	int translate_from_crnl=0;
-	int send_ctrl_c=0;
+	bool noecho=0;
+	bool do_hupcl=0;
+	bool send_ctrl_c=0;
+	int listenPort=0;
+	bool doFork=0;
 
-	while ((opt=getopt(argc,argv,"b:o:t:B:svdDrRcCpPnNkxXyYTHw:h")) != -1) {
+	while ((opt=getopt(argc,argv,"b:o:t:B:svdDrRcCpPnNkxXyYTHw:hl:f")) != -1) {
 		switch (opt) {
 		case 'b': baudin=strtol(optarg,NULL,10); break;
 		case 'o': baudout=strtol(optarg,NULL,10); break;
@@ -109,8 +186,8 @@ int main(int argc, char *const argv[]) {
 			case '8': bits=CS8; break;
 			default: usage(argv);
 			} break;
-		case 'v': verbose=1; break;
-		case 's': showstate=1; break;
+		case 'v': verbose++; break;
+		case 's': showstate=true; break;
 		case 'd': clearlines |= TIOCM_DTR; break;
 		case 'D': setlines   |= TIOCM_DTR; break;
 		case 'r': clearlines |= TIOCM_RTS; break;
@@ -119,16 +196,18 @@ int main(int argc, char *const argv[]) {
 		case 'C': setlines   |= TIOCM_CTS; break;
 		case 'p': parity = 1; break;
 		case 'P': parity = 2; break;
-		case 'n': canonical=0; break;
-		case 'N': noecho=1; break;
+		case 'n': canonical=false; break;
+		case 'N': noecho=true; break;
 		case 'x': translate_to_crnl=1; break;
 		case 'X': translate_to_crnl=2; break;
 		case 'y': translate_from_crnl=1; break;
 		case 'Y': translate_from_crnl=2; break;
-		case 'T': timing=1; break;
-		case 'H': do_hupcl=1; break;
-		case 'k': send_ctrl_c=1; break;
+		case 'T': timing=true; break;
+		case 'H': do_hupcl=true; break;
+		case 'k': send_ctrl_c=true; break;
 		case 'w': wait=strtol(optarg,NULL,10); break;
+		case 'l': listenPort=strtol(optarg,NULL,10); break;
+		case 'f': doFork=true; break;
 		case 'h':
 		default: usage(argv);
 		}
@@ -281,13 +360,6 @@ int main(int argc, char *const argv[]) {
 		perror("can't go to blocking mode");
 	}
 	
-	struct pollfd pollfds[2];
-	pollfds[0].fd = fd;
-	pollfds[0].events = POLLIN | POLLERR;
-	pollfds[1].fd = 0;
-	pollfds[1].events = POLLIN;
-	int nfds=2;
-
 	if (showstate) getstate(fd);
 	ioctl(fd,TIOCMBIC,&clearlines);
 	ioctl(fd,TIOCMBIS,&setlines);
@@ -301,70 +373,80 @@ int main(int argc, char *const argv[]) {
 		close(fd);
 		exit(0);
 	}
+
+	if (listenPort != 0) {
+		if (doFork) {
+			pid_t daemon_pid;
+			daemon_pid = fork();
+			if (daemon_pid == 0) { /* now we are the forked process */
+				int ffd;
+				ffd=open("/dev/null",O_RDONLY);
+				dup2(ffd,0);
+				ffd=open("/dev/null",O_WRONLY);
+				dup2(ffd,1);
+				ffd=open("/dev/null",O_WRONLY);
+				dup2(ffd,2);
+				setsid();       // detach from old session;
+			}	else if (daemon_pid != -1) { /* now we are still the old process */
+				exit(0); 
+			}	else { /* dirt! the fork failed! */
+				perror("could not fork daemon");
+				exit(1);
+			}
+		}
+
+
+		int waitfd = socket(AF_INET, SOCK_STREAM, 0);
+		struct sockaddr_in serverAddress;
+		serverAddress.sin_family = AF_INET;
+		serverAddress.sin_addr.s_addr = htonl(INADDR_ANY);
+		serverAddress.sin_port = htons(listenPort);
+		int tmp=1;
+		setsockopt(waitfd,SOL_SOCKET,SO_REUSEADDR,&tmp,sizeof(tmp));
 	
-	for (;timeout;) {
-		int result;
-		struct timeval now;
-		result=poll(pollfds,
-									nfds,
-									timeout);
-		gettimeofday(&now,NULL);
-		if (nfds==1 && result==0) {
-			wait -= timeout;
+		if (bind(waitfd,
+		         (struct sockaddr *) &serverAddress,
+		         sizeof(serverAddress)) < 0) {
+			perror("can't bind listening socket");
+			exit(1);
 		}
-		if (nfds==1 && result==0 && timeout>0 && wait<=0) {
-			break;
-		}
-		if (result==0 && showstate) {
-			getstate(fd);
-		}
-		if (pollfds[0].revents & POLLERR) { /* some problem occurred */
-			fprintf(stderr,"Error: %d.%06d %s\n",
-							(int)(now.tv_sec), (int)(now.tv_usec),strerror(errno));
-		}
-		if (pollfds[0].revents & POLLIN) { /* data from tty to stdout */
-			char c;
-			read(fd,&c,1);
-			if (timing) {
-				fprintf(stderr,"Received %d.%06d '%c' (0x%02x)\n",
-								(int)(now.tv_sec), (int)(now.tv_usec),c<' '?' ':c,c);
-			}
-			if (translate_from_crnl && (c=='\r')) {
-				if (translate_from_crnl==1) {
-					write(1,&c,1);
+		listen(waitfd, 1);
+		struct sockaddr_in clientAddress;
+		socklen_t clientAddressLength;
+		clientAddressLength = sizeof(clientAddress);
+		
+
+		for (;;) {
+			int connectSocket = accept(waitfd,
+			                           (struct sockaddr *) &clientAddress,
+			                           &clientAddressLength);
+			if (connectSocket < 0) {
+				if (errno==EINVAL) { // probably the exit handler closed the socket
+					perror("accept socket vanished, stopping thread");
+					exit(1);
 				}
-				c='\n';
+				perror("can't accept incoming socket");
+				continue;
 			}
-			write(1,&c,1);
+			struct pollfd pollfds[2];
+			pollfds[0].fd = fd;
+			pollfds[0].events = POLLIN | POLLERR;
+			pollfds[1].fd = connectSocket;
+			pollfds[1].events = POLLIN;
+			
+			talkLoop(pollfds,2,connectSocket);
+
+			close(connectSocket);
 		}
-		if (pollfds[1].revents & POLLIN) { /* data from stdin to tty */
-			char c;
-			read(0,&c,1);
-			if (translate_to_crnl && (c=='\n')) {
-				char cr='\r';
-				gettimeofday(&now,NULL);
-				write(fd,&cr,1);
-				if (timing) {
-					fprintf(stderr,"Sent %d.%06d <cr> (0x%02x)\n",
-									(int)(now.tv_sec), (int)(now.tv_usec),cr);
-				}
-			} 
-			if (translate_to_crnl < 2 || (c!='\n')) {
-				gettimeofday(&now,NULL);
-				write(fd,&c,1);
-				if (timing) {
-					fprintf(stderr,"Sent %d.%06d '%c' (0x%02x)\n",
-									(int)(now.tv_sec), (int)(now.tv_usec),c<' '?' ':c,c);
-				}
-			}
-		}
-		if ((pollfds[1].revents & POLLHUP) && !(pollfds[1].revents & POLLIN)) { 
-			if (timeout > 0) {
-				nfds=1;
-			} else {
-				break;
-			}
-		}
+ 
+	} else {
+		struct pollfd pollfds[2];
+		pollfds[0].fd = fd;
+		pollfds[0].events = POLLIN | POLLERR;
+		pollfds[1].fd = 0;
+		pollfds[1].events = POLLIN;
+		
+		talkLoop(pollfds,2,1);
 	}
 	close(fd);
 }
