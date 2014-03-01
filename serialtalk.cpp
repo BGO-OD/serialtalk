@@ -417,7 +417,13 @@ int main(int argc, char *const argv[]) {
 		if ((closestSpeed < baudin * 99. / 100) || (closestSpeed > baudin * 101. / 100)) {
 			fprintf(stderr, "Warning: Cannot set serial port speed to %d. Closest possible is %d.\r\n", baudin, closestSpeed);
 		}
-	
+		
+		// If you get a deprecation-warning from here, try to implement 
+		// http://stackoverflow.com/a/19992472/1290629
+		// You will need to take care to: 
+		// - not to call tcsetattr afterwards anymore. It uses an old-style ioctl overriding this. 
+		// - do that (or all else here) in a different file, as termios.h and asm/termios.h collide
+		//   and cannot be included together. 
 		if (ioctl(fd, TIOCSSERIAL, &ser) < 0) {
 			perror("Could not set serial struct.");
 		}
