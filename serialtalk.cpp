@@ -15,6 +15,11 @@
 #include <sys/socket.h>
 #include <netdb.h>
 
+/* This is for ASYNC_*, serial_struct on linux => custom baud rates. */
+#if defined(__linux__)
+#define CUSTOM_BAUD_POSSIBLE
+#include <linux/serial.h>
+#endif
 
 static int timeout=-1;
 static int fd;
@@ -48,6 +53,9 @@ static void usage(char *const argv[]) {
 					"\t\t1200, 1800, 2400, 4800, 9600 (default), 19200, 38400,\n"
 					"\t\t57600, 115200, 230400, 500000, 576000, 921600, 1000000,\n" 
 	        "\t\t1152000, 1500000, 2000000, 2500000, 3000000, 3500000, 4000000\n",baudout);
+#ifdef CUSTOM_BAUD_POSSIBLE	
+	fprintf(stderr,"\t\tFor input=output baudrate, non-POSIX baudrates are supported.\n");
+#endif
 	fprintf(stderr,"\t-t number\tset poll timeout in milliseconds (%d)\n"
 	        "\t\t0 means no loop, negative is for ever\n",timeout);
 	fprintf(stderr,"\t-B number\tset number of bits, must be 5,6,7, or 8   (%d)\n",
@@ -281,6 +289,11 @@ int main(int argc, char *const argv[]) {
 		fd_attr.c_cflag |= HUPCL;
 	}
 	fd_attr.c_lflag = 0;
+	bool customBaudPossible=false;
+#ifdef CUSTOM_BAUD_POSSIBLE
+	customBaudPossible=true;
+#endif
+	bool needCustomBaud=false;
 	speed_t baud;
 	switch (baudout) {
 	case 0: baud=B0;break;
@@ -313,10 +326,27 @@ int main(int argc, char *const argv[]) {
 	case 3000000: baud=B3000000;break; 
 	case 3500000: baud=B3500000;break; 
 	case 4000000: baud=B4000000;break; 
-	default: fprintf(stderr,"illegal baud rate %d",baudout);
-		exit(EXIT_FAILURE);
+	default: 
+		{
+			if (customBaudPossible) {
+				needCustomBaud = true;
+				if (verbose) {
+					fprintf(stderr,"non-POSIX baud rate %d\r\n",baudout);
+				}
+				if (baudout != baudin) {
+					fprintf(stderr,"non-POSIX baud rates only supported if input = output baud rate!\r\n");
+					fprintf(stderr,"You set input baud rate to %d, output to %d\r\n",baudin,baudout);
+					exit(EXIT_FAILURE);
+				}
+				// Setting serial-divisor only works fine for 38400 baud. 
+				baud=B38400;
+			} else {
+				fprintf(stderr,"illegal baud rate %d\r\n",baudout);
+				exit(EXIT_FAILURE);
+			}
+		}
 	}
-	cfsetospeed(&fd_attr,baud); /* baud rate is 9600 Baud */
+	cfsetospeed(&fd_attr,baud);
 	switch (baudin) {
 	case 0: baud=B0;break;
 	case 50: baud=B50;break;
@@ -347,16 +377,44 @@ int main(int argc, char *const argv[]) {
 	case 2500000: baud=B2500000;break; 
 	case 3000000: baud=B3000000;break; 
 	case 3500000: baud=B3500000;break; 
-	case 4000000: baud=B4000000;break; 
-
-	default: fprintf(stderr,"illegal baud rate %d",baudin);
-		exit(EXIT_FAILURE);
+	case 4000000: baud=B4000000;break;
+	default: 
+		{
+			if (customBaudPossible) {
+				if (baudout != baudin) {
+					fprintf(stderr,"non-POSIX baud rates only supported if input = output baud rate!\r\n");
+					fprintf(stderr,"You set input baud rate to %d, output to %d\r\n",baudin,baudout);
+					exit(EXIT_FAILURE);
+				}
+				// Setting serial-divisor only works fine for 38400 baud. 
+				baud=B38400;
+			} else {
+				fprintf(stderr,"illegal baud rate %d\r\n",baudout);
+				exit(EXIT_FAILURE);
+			}
+		}
 	}
 	cfsetispeed(&fd_attr,baud);
 	if (tcsetattr(fd,TCSANOW,&fd_attr) == -1) {/* commit changes NOW */
-		perror("can't setattr");
+		perror("Can't setattr.");
 		close(fd);
 		exit(1);
+	}
+	if (needCustomBaud == true) {
+#if defined(__linux__)
+		struct serial_struct ser;
+
+		if (ioctl(fd, TIOCGSERIAL, &ser) < 0) {
+			perror("Could not get serial struct.");
+		}
+		ser.custom_divisor = ser.baud_base / baudin;
+		ser.flags &= ~ASYNC_SPD_MASK;
+		ser.flags |= ASYNC_SPD_CUST;
+
+		if (ioctl(fd, TIOCSSERIAL, &ser) < 0) {
+			perror("Could not set serial struct.");
+		}
+#endif
 	}
 	int flags;
 	flags=fcntl(fd,F_GETFL);
