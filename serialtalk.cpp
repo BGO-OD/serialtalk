@@ -407,10 +407,17 @@ int main(int argc, char *const argv[]) {
 		if (ioctl(fd, TIOCGSERIAL, &ser) < 0) {
 			perror("Could not get serial struct.");
 		}
-		ser.custom_divisor = ser.baud_base / baudin;
 		ser.flags &= ~ASYNC_SPD_MASK;
 		ser.flags |= ASYNC_SPD_CUST;
-
+		ser.custom_divisor = (ser.baud_base + baudin/2) / baudin;
+		int closestSpeed = ser.baud_base / ser.custom_divisor;
+		if (verbose) {
+			fprintf(stderr, "Using custom baudrate, %d requested, using closest possible %d.\r\n", baudin, closestSpeed);
+		}
+		if ((closestSpeed < baudin * 99. / 100) || (closestSpeed > baudin * 101. / 100)) {
+			fprintf(stderr, "Warning: Cannot set serial port speed to %d. Closest possible is %d.\r\n", baudin, closestSpeed);
+		}
+	
 		if (ioctl(fd, TIOCSSERIAL, &ser) < 0) {
 			perror("Could not set serial struct.");
 		}
