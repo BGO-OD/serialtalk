@@ -41,6 +41,7 @@ static bool do_hupcl = false;
 static bool send_ctrl_c = false;
 static int listenPort = 0;
 static bool doFork = false;
+static bool stopbits = false;
 
 
 static void usage(char *const argv[]) __attribute__ ((noreturn));
@@ -70,6 +71,7 @@ static void usage(char *const argv[]) {
 	fprintf(stderr, "\t-C\tset   CTS line (%s)\n", setlines & TIOCM_CTS ? "yes" : "no");
 	fprintf(stderr, "\t-p\tenable odd parity (default: %s)\n", parity == 0 ? "none" : (parity == 1 ? "odd" : "even"));
 	fprintf(stderr, "\t-P\tenable even parity\n");
+	fprintf(stderr, "\t-S\tset stop bits to 2 or 1.5 instead of 1\n");
 	fprintf(stderr, "\t-n\tnon-canonical stdin, read immediately (not at newline) (%scanonical)\n",
 	        (!canonical) ? "yes, non-" : "no, ");
 	fprintf(stderr, "\t-N\tno local echo for typed characters (%s)\n", noecho ? "yes, no echo" : "no, do echo");
@@ -187,7 +189,7 @@ int main(int argc, char *const argv[]) {
 	struct termios fd_attr;
 	int opt;
 
-	while ((opt = getopt(argc, argv, "b:o:t:B:svdDrRcCpPnNkxXyYTHw:hl:f")) != -1) {
+	while ((opt = getopt(argc, argv, "b:o:t:B:SsvdDrRcCpPnNkxXyYTHw:hl:f")) != -1) {
 		switch (opt) {
 			case 'b':
 				baudin = strtol(optarg, NULL, 10);
@@ -197,6 +199,9 @@ int main(int argc, char *const argv[]) {
 				break;
 			case 't':
 				timeout = strtol(optarg, NULL, 10);
+				break;
+			case 'S':
+				stopbits = true;
 				break;
 			case 'B':
 				switch (optarg[0]) {
@@ -318,8 +323,8 @@ int main(int argc, char *const argv[]) {
 		printstate(clearlines);
 		fprintf(stderr, "\t%d bits\n", (bits == CS8) ? 8 : ((bits == CS7) ? 7 : ((bits == CS6) ? 6 : ((bits == CS5) ? 5 : (-1)))));
 		fprintf(stderr, "\t%s parity\n", parity ? ((parity == 1) ? "odd" : "even") : "no");
+		fprintf(stderr, "\t%d stop bits\n", (stopbits) ? 2 : 1);
 	}
-
 
 	if (!canonical) {
 		struct termios attr;
@@ -332,6 +337,10 @@ int main(int argc, char *const argv[]) {
 		tcgetattr(0, &attr);
 		attr.c_lflag &= ~ECHO;
 		tcsetattr(0, TCSANOW, &attr);
+	}
+
+	if (stopbits) {
+		fd_attr.c_cflag |= CSTOPB;
 	}
 
 	fd_attr.c_iflag = IGNBRK;
