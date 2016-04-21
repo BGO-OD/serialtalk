@@ -63,7 +63,7 @@ static bool doFork = false;
 static bool stopbits = false;
 
 
-static void usage(char *const argv[]) __attribute__ ((noreturn));
+static void usage(char *const argv[]);
 static void usage(char *const argv[]) {
 	fprintf(stderr, "usage: %s <options> device\n", argv[0]);
 	fprintf(stderr, "\tExit by ctrl-c (kill)!\n");
@@ -106,7 +106,6 @@ static void usage(char *const argv[]) {
 	fprintf(stderr, "\t-f\tfork into a daemonic life (%s)\n", doFork ? "yes" : "no");
 
 	fprintf(stderr, "\t-h\tthis help\n");
-	exit(EXIT_FAILURE);
 }
 
 static void printstate(int state) {
@@ -238,6 +237,7 @@ int main(int argc, char *const argv[]) {
 						break;
 					default:
 						usage(argv);
+						exit(EXIT_FAILURE);
 				}
 				break;
 			case 'v':
@@ -307,12 +307,16 @@ int main(int argc, char *const argv[]) {
 				doFork = true;
 				break;
 			case 'h':
+				usage(argv);
+				exit(EXIT_SUCCESS);
 			default:
 				usage(argv);
+				exit(EXIT_FAILURE);
 		}
 	}
 	if (optind >= argc) {
 		usage(argv);
+		exit(EXIT_FAILURE);
 	}
 
 	if (wait && timeout == -1) {
