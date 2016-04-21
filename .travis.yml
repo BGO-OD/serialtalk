@@ -32,4 +32,4 @@ script:
   - make
   - make install
   - cd ${TRAVIS_BUILD_DIR}/install
-  - serialtalk --help
+  - serialtalk -h
