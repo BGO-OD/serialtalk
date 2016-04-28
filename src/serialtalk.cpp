@@ -40,6 +40,8 @@
 #include <linux/serial.h>
 #endif
 
+#define VERSION "1.0"
+
 static int timeout = -1;
 static int fd;
 static bool timing = false;
@@ -65,6 +67,11 @@ static bool stopbits = false;
 
 static void usage(char *const argv[]);
 static void usage(char *const argv[]) {
+	fprintf(stderr, "serialtalk, version %s\n", VERSION);
+	fprintf(stderr, "Copyright (C) 2016 BGO-OD Experiment.\n");
+	fprintf(stderr, "License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>\n\n");
+	fprintf(stderr, "This is free software; you are free to change and redistribute it.\n");
+	fprintf(stderr, "There is NO WARRANTY, to the extent permitted by law.\n\n");
 	fprintf(stderr, "usage: %s <options> device\n", argv[0]);
 	fprintf(stderr, "\tExit by ctrl-c (kill)!\n");
 	fprintf(stderr, "\t-b number\tset baudrate (%d)\n", baudin);
