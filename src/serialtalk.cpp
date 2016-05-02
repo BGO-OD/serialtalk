@@ -108,7 +108,7 @@ static void usage(char *const argv[]) {
 	fprintf(stderr, "\t-y\ttranslate cr to cr nl (from device to terminal) (%s)\n", translate_from_crnl == 1 ? "yes" : "no");
 	fprintf(stderr, "\t-Y\ttranslate cr to nl (from device to terminal) (%s)\n", translate_from_crnl == 2 ? "yes" : "no");
 	fprintf(stderr, "\t-H\tdo HUPCL (lower control lines after close) (%s)\n", do_hupcl ? "yes" : "no");
-	fprintf(stderr, "\t-w number\twait number miliseconds after end of stdin before close (%d)\n", wait);
+	fprintf(stderr, "\t-w number\twait number milliseconds after end of stdin before close (%d)\n", wait);
 	fprintf(stderr, "\t-l port\tlisten on port port for tcp connections and use them instead of stdin/stdout (%d)\n", listenPort);
 	fprintf(stderr, "\t-f\tfork into a daemonic life (%s)\n", doFork ? "yes" : "no");
 
