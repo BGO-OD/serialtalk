@@ -13,22 +13,22 @@ After opening and configuring the device the programs waits for characters
 to be arrive from stdin, which are then transferred to the device and vice
 versa. When using canonical mode (default) the characters typed will only
 be seen by the program at the newline, to send each character immediately
-use the -n option fon non-canonical mode.
-To exit again from the program use a sigint, i.e. ctrl-c.
+use the -n option for non-canonical mode.
+To exit again from the program use a SIGINT, i.e. ctrl-c.
 
-As there is no history to the stuff read from stdin it might be usefull
-ro use the readline wrapper rlwrap around this program.
+As there is no history to the stuff read from stdin it might be useful
+to use the readline wrapper rlwrap around this program.
 
 .SH OPTIONS
 Default values for each option are given in brackets.
 .IP	"-b number"
-set baudrate (9600)
+set baud rate (9600)
 .IP "-o number"
-set output baudrate (0) 0: the same as input
+set output baud rate (0) 0: the same as input
 
 available: 0, 50, 75, 110, 134, 150, 200, 300, 600, 1200, 1800, 2400, 4800, 9600 (default), 19200, 57600, 115200, 230400, 500000, 576000, 921600, 1000000, 1152000, 1500000, 2000000, 2500000, 3000000, 3500000, 4000000
 
-For input=output baudrate, non-POSIX baudrates are supported.
+For input=output baud rate, non-POSIX baud rates are supported.
 .IP "-t number"
 set poll timeout in milliseconds (-1)
 0 means no loop, negative is for ever
@@ -75,17 +75,17 @@ translate cr to nl (from device to terminal) (no)
 .IP -H
 do HUPCL (lower control lines after close) (no)
 .IP "-w number"
-wait number miliseconds after end of stdin before close (0)
+wait number milliseconds after end of stdin before close (0)
 .IP "-l port"
-listen on port port for tcp connections and use them instead of stdin/stdout (0)
+listen on port port for TCP connections and use them instead of stdin/stdout (0)
 .IP -f
-fork into a daemonic life (no)
+fork into a demonic life (no)
 .IP -h
 this help
 
 .SH BUGS
-When using the -l option to listen to a networtk port there is no security mechanism,
-i.e. anyone who can access that port could send malicios commands.
+When using the -l option to listen to a network port there is no security mechanism,
+i.e. anyone who can access that port could send malicious commands.
 This option should only be used in well-firewalled networks with trusted users.
 .SH AUTHOR
 Juergen Hannappel   juergen@juergen-hannappel.de

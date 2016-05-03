@@ -74,14 +74,14 @@ static void usage(char *const argv[]) {
 	fprintf(stderr, "There is NO WARRANTY, to the extent permitted by law.\n\n");
 	fprintf(stderr, "usage: %s <options> device\n", argv[0]);
 	fprintf(stderr, "\tExit by ctrl-c (kill)!\n");
-	fprintf(stderr, "\t-b number\tset baudrate (%d)\n", baudin);
-	fprintf(stderr, "\t-o number\tset output baudrate (%d) 0: the same as input\n"
+	fprintf(stderr, "\t-b number\tset baud rate (%d)\n", baudin);
+	fprintf(stderr, "\t-o number\tset output baud rate (%d) 0: the same as input\n"
 	        "\t\tavailable: 0, 50, 75, 110, 134, 150, 200, 300, 600,\n"
 	        "\t\t1200, 1800, 2400, 4800, 9600 (default), 19200, 38400,\n"
 	        "\t\t57600, 115200, 230400, 500000, 576000, 921600, 1000000,\n"
 	        "\t\t1152000, 1500000, 2000000, 2500000, 3000000, 3500000, 4000000\n", baudout);
 	#ifdef CUSTOM_BAUD_POSSIBLE
-	fprintf(stderr, "\t\tFor input=output baudrate, non-POSIX baudrates are supported.\n");
+	fprintf(stderr, "\t\tFor input=output baud rate, non-POSIX baud rates are supported.\n");
 	#endif
 	fprintf(stderr, "\t-t number\tset poll timeout in milliseconds (%d)\n"
 	        "\t\t0 means no loop, negative is for ever\n", timeout);
@@ -109,8 +109,8 @@ static void usage(char *const argv[]) {
 	fprintf(stderr, "\t-Y\ttranslate cr to nl (from device to terminal) (%s)\n", translate_from_crnl == 2 ? "yes" : "no");
 	fprintf(stderr, "\t-H\tdo HUPCL (lower control lines after close) (%s)\n", do_hupcl ? "yes" : "no");
 	fprintf(stderr, "\t-w number\twait number milliseconds after end of stdin before close (%d)\n", wait);
-	fprintf(stderr, "\t-l port\tlisten on port port for tcp connections and use them instead of stdin/stdout (%d)\n", listenPort);
-	fprintf(stderr, "\t-f\tfork into a daemonic life (%s)\n", doFork ? "yes" : "no");
+	fprintf(stderr, "\t-l port\tlisten on port port for TCP connections and use them instead of stdin/stdout (%d)\n", listenPort);
+	fprintf(stderr, "\t-f\tfork into a demonic life (%s)\n", doFork ? "yes" : "no");
 
 	fprintf(stderr, "\t-h\tthis help\n");
 }
@@ -345,8 +345,8 @@ int main(int argc, char *const argv[]) {
 	if (verbose) {
 		fprintf(stderr, "done.\n");
 		fprintf(stderr, "Parameters:\n");
-		fprintf(stderr, "\tinput baudrate\t%d\n", baudin);
-		fprintf(stderr, "\toutput baudrate\t%d\n", baudout);
+		fprintf(stderr, "\tinput baud rate\t%d\n", baudin);
+		fprintf(stderr, "\toutput baud rate\t%d\n", baudout);
 		fprintf(stderr, "\twill set ");
 		printstate(setlines);
 		fprintf(stderr, "\twill clear ");
@@ -633,7 +633,7 @@ int main(int argc, char *const argv[]) {
 		ser.custom_divisor = (ser.baud_base + baudin / 2) / baudin;
 		int closestSpeed = ser.baud_base / ser.custom_divisor;
 		if (verbose) {
-			fprintf(stderr, "Using custom baudrate, %d requested, using closest possible %d.\r\n", baudin, closestSpeed);
+			fprintf(stderr, "Using custom baud rate, %d requested, using closest possible %d.\r\n", baudin, closestSpeed);
 		}
 		if ((closestSpeed < baudin * 99. / 100) || (closestSpeed > baudin * 101. / 100)) {
 			fprintf(stderr, "Warning: Cannot set serial port speed to %d. Closest possible is %d.\r\n", baudin, closestSpeed);
