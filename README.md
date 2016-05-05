@@ -5,9 +5,6 @@
 
 [On OpenSuse build service](https://build.opensuse.org/package/show/home:JHannappel/serialtalk)
 
-
-[On OpenSuse build service](https://build.opensuse.org/package/show/home:JHannappel/serialtalk)
-
 simple command-line tool to talk to serial devices
 
 
