@@ -5,6 +5,6 @@
 
 [On OpenSuse build service](https://build.opensuse.org/package/show/home:JHannappel/serialtalk)
 
+[In official Gentoo portage tree](https://packages.gentoo.org/packages/dev-util/serialtalk)
+
 simple command-line tool to talk to serial devices
-
-
