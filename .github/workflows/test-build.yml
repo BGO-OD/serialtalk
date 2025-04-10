@@ -1,0 +1,35 @@
+name: "Run tests"
+
+on:
+  push
+
+jobs:
+  test-build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Update apt repos
+      run: |
+        sudo apt-get -y update
+
+    - name: Install basics for compilation
+      run: |
+        sudo apt-get -y install build-essential
+
+    - name: Checkout repo
+      uses: actions/checkout@v3
+
+    - name: Compile and install
+      run: |
+        mkdir ~/build
+        mkdir ~/install
+        cd ~/build
+        cmake -DCMAKE_INSTALL_PREFIX:PATH=~/install ${GITHUB_WORKSPACE}/
+        make
+        make install
+
+    - name: Test execution
+      run: |
+        export PATH=${PATH}:~/install/bin
+        export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:~/install/lib
+        serialtalk -h
